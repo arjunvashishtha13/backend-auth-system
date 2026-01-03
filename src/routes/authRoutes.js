@@ -1,32 +1,43 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
-const { createUser } = require("../models/userModel");
+const { createUser, findUserByEmail } = require("../models/userModel");
 
 const router = express.Router();
 
-router.post("/signup", async (req, res) => {
+
+
+router.post("/login", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    console.log("Login request received:", req.body);
+    const { email, password } = req.body;
 
-    // basic validation
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "All fields required" });
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password required" });
     }
 
-    // hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    // insert user
-    await createUser(name, email, hashedPassword);
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    res.status(201).json({ message: "User registered successfully" });
+    res.status(200).json({
+      message: "Login successful",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email
+      }
+    });
   } catch (err) {
-    if (err.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({ message: "Email already exists" });
-    }
-
-    res.status(500).json({ message: "Server error" });
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
 module.exports = router;
+
