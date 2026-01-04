@@ -1,14 +1,36 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+
 const { createUser, findUserByEmail } = require("../models/userModel");
+const authMiddleware = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
 
+router.post("/signup", async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await createUser(name, email, hashedPassword);
+
+    res.status(201).json({ message: "User registered successfully" });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Email already exists" });
+    }
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 router.post("/login", async (req, res) => {
   try {
-    console.log("Login request received:", req.body);
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -25,19 +47,24 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    res.status(200).json({
-      message: "Login successful",
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email
-      }
-    });
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
+
+    res.status(200).json({ token });
   } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-module.exports = router;
 
+router.get("/profile", authMiddleware, (req, res) => {
+  res.status(200).json({
+    message: "Profile accessed",
+    user: req.user
+  });
+});
+
+module.exports = router;
